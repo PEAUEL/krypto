@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Krypto-Tool: Vigenère, Kasiski & Brute-Force</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #333; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f7fa; }
+        h1, h2 { color: #1a2a3a; margin-top: 0; }
+        .section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; box-sizing: border-box; resize: vertical; }
+        input[type="text"], input[type="number"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; }
+        button { background-color: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0052a3; }
+        button.secondary { background-color: #e2e8f0; color: #4a5568; }
+        button.secondary:hover { background-color: #cbd5e0; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px; }
+        .flex-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .result-box { background: #edf2f7; padding: 12px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 250px; overflow-y: auto; border-left: 4px solid #0066cc; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e2e8f0; }
+        th { background-color: #f7fafc; }
+        .bar-container { display: flex; align-items: center; gap: 5px; width: 100%; }
+        .bar { height: 12px; border-radius: 2px; }
+        .bar.text-freq { background-color: #3182ce; }
+        .bar.de-freq { background-color: #a0aec0; }
+        .legend { display: flex; gap: 15px; font-size: 12px; margin-bottom: 5px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+
+    <h1>🔒 Krypto-Tool: Vigenère & Kasiski</h1>
+
+    <!-- 1. TEXTEINGABE & STATISTIK -->
+    <div class="section">
+        <h2>1. Eingabetext</h2>
+        <textarea id="inputText" placeholder="Hier den Text eingeben... (Leerzeichen und Sonderzeichen werden bei der Analyse ignoriert)"></textarea>
+        
+        <div class="grid">
+            <div>
+                <h3>Häufigkeitsanalyse im Vergleich</h3>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-color" style="background:#3182ce"></div> Dein Text</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#a0aec0"></div> Deutsche Sprache</div>
+                </div>
+                <div style="max-height: 300px; overflow-y: auto; background: white; border: 1px solid #e2e8f0; border-radius:4px;">
+                    <table id="freqTable">
+                        <thead>
+                            <tr><th>Zchn.</th><th>Häufigkeit im Vergleich</th><th>% Text</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="3" style="color:#718096; text-align:center;">Warte auf Texteingabe...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div>
+                <h3>Text-Metriken</h3>
+                <p><strong>Buchstaben (A-Z):</strong> <span id="charCount">0</span></p>
+                <p><strong>Koinzidenzindex (KI):</strong> <span id="icValue">0.0000</span> <small style="color:#718096;">(DE-Soll: ~0.0762, Zufall: ~0.0385)</small></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. ENCODER / DECODER -->
+    <div class="section">
+        <h2>2. Vigenère Ver- und Entschlüsselung</h2>
+        <div class="flex-row">
+            <label for="vigenereKey">Schlüssel (Codewort):</label>
+            <input type="text" id="vigenereKey" placeholder="Z.B. APFEL" style="text-transform: uppercase;">
+            <button onclick="processVigenere(true)">🔒 Verschlüsseln</button>
+            <button onclick="processVigenere(false)" class="secondary">🔓 Entschlüsseln</button>
+        </div>
+        <h3>Ergebnis:</h3>
+        <div id="vigenereResult" class="result-box">Noch keine Aktion ausgeführt.</div>
+    </div>
+
+    <!-- 3. KASISKI TEST -->
+    <div class="section">
+        <h2>3. Kasiski-Test (Muster-Analyse)</h2>
+        <div class="flex-row">
+            <label for="kasiskiMinLen">Minimale Musterlänge:</label>
+            <input type="number" id="kasiskiMinLen" value="3" min="2" max="5" style="width: 60px;">
+            <button onclick="runKasiskiTest()">🔎 Muster suchen</button>
+        </div>
+        <div id="kasiskiResult" class="result-box">Klicke auf "Muster suchen", um den Test zu starten.</div>
+    </div>
+
+    <!-- 4. BRUTE-FORCE -->
+    <div class="section">
+        <h2>4. Brute-Force-Angriff (nach deutscher Häufigkeit)</h2>
+        <p style="font-size:14px; margin-top:0; color:#4a5568;">
+            Generiert alle Schlüssel der gewählten Länge und bewertet die Treffer mittels Chi-Quadrat-Test gegen die deutsche Buchstabenhäufigkeit.
+        </p>
+        <div class="flex-row">
+            <label for="bfLen">Schlüssellänge:</label>
+            <input type="number" id="bfLen" value="3" min="1" max="4" style="width: 60px;">
+            <button onclick="runBruteForce()">⚡ Angriff starten</button>
+        </div>
+        <h3>Top-Treffer (Beste Übereinstimmung zuerst):</h3>
+        <div id="bfResult" class="result-box">Warte auf Angriffssignal...</div>
+    </div>
+
+    <script>
+        // Offizielle Häufigkeitsverteilung der deutschen Sprache (A-Z)
+        const DE_FREQ = {
+            'E': 15.93, 'N': 11.17, 'I': 7.55, 'R': 7.00, 'S': 6.27, 'T': 6.17, 'A': 6.05, 'H': 4.77, 
+            'D': 4.68, 'U': 4.35, 'C': 3.16, 'L': 3.01, 'M': 2.53, 'G': 2.23, 'O': 2.06, 'W': 1.78, 
+            'M': 2.53, 'F': 1.66, 'B': 1.62, 'Z': 1.21, 'K': 1.14, 'V': 0.67, 'P': 0.61, 'Ü': 0.58, 
+            'Ä': 0.54, 'Ö': 0.26, 'X': 0.11, 'Y': 0.04, 'J': 0.24, 'Q': 0.02
+        };
+        // Für den Standard-A-Z-Kompakt-Abgleich normieren wir auf das 26er-Standardalphabet:
+        const GERMAN_26 = {
+            'A': 6.34, 'B': 1.89, 'C': 3.06, 'D': 5.08, 'E': 17.40, 'F': 1.66, 'G': 3.01, 'H': 4.11,
+            'I': 7.55, 'J': 0.27, 'K': 1.21, 'L': 3.44, 'M': 2.53, 'N': 9.78, 'O': 2.51, 'P': 0.79,
+            'Q': 0.02, 'R': 7.00, 'S': 7.27, 'T': 6.15, 'U': 4.35, 'V': 0.67, 'W': 1.89, 'X': 0.03,
+            'Y': 0.04, 'Z': 1.13
+        };
+
+        // Textbereinigung und Event-Listener für Live-Statistik
+        const inputTextArea = document.getElementById('inputText');
+        inputTextArea.addEventListener('input', updateStats);
+
+        function cleanText(text) {
+            return text.toUpperCase().replace(/[^A-Z]/g, '');
+        }
+
+        // 1. STATISTIK & UPDATE
+        function updateStats() {
+            const rawText = inputTextArea.value;
+            const text = cleanText(rawText);
+            document.getElementById('charCount').innerText = text.length;
+
+            if (text.length === 0) {
+                document.getElementById('icValue').innerText = "0.0000";
+                return;
+            }
+
+            // Häufigkeiten zählen
+            const counts = {};
+            for (let char of text) {
+                counts[char] = (counts[char] || 0) + 1;
+            }
+
+            // Koinzidenzindex berechnen
+            let icSum = 0;
+            for (let letter = 65; letter <= 90; letter++) {
+                let char = String.fromCharCode(letter);
+                let count = counts[char] || 0;
+                icSum += count * (count - 1);
+            }
+            const ic = icSum / (text.length * (text.length - 1));
+            document.getElementById('icValue').innerText = isNaN(ic) ? "0.0000" : ic.toFixed(4);
+
+            // Tabelle aufbauen
+            const tbody = document.querySelector('#freqTable tbody');
+            tbody.innerHTML = '';
+
+            for (let letter = 65; letter <= 90; letter++) {
+                const char = String.fromCharCode(letter);
+                const count = counts[char] || 0;
+                const percent = ((count / text.length) * 100).toFixed(1);
+                const dePercent = GERMAN_26[char];
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${char}</strong></td>
+                    <td>
+                        <div class="bar-container">
+                            <div class="bar text-freq" style="width: ${percent * 4}px;"></div>
+                            <div class="bar de-freq" style="width: ${dePercent * 4}px;"></div>
+                        </div>
+                    </td>
+                    <td>${percent}% <small style="color:#718096">(${dePercent}%)</small></td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        // 2. VIGENÈRE MECHANIK
+        function processVigenere(encrypt = true) {
+            const text = cleanText(inputTextArea.value);
+            let key = cleanText(document.getElementById('vigenereKey').value);
+            
+            if (!text || !key) {
+                alert("Bitte gib sowohl einen Text als auch ein Codewort ein.");
+                return;
+            }
+
+            let result = "";
+            for (let i = 0; i < text.length; i++) {
+                let textCharVal = text.charCodeAt(i) - 65;
+                let keyCharVal = key.charCodeAt(i % key.length) - 65;
+                
+let newCharVal;
+if (encrypt) {
+newCharVal = (textCharVal + keyCharVal) % 26;
+} else {
+newCharVal = (textCharVal - keyCharVal + 26) % 26;
+}
+result += String.fromCharCode(newCharVal + 65);
+}
+// Formatierung in 5er-Blöcken zur besseren Lesbarkeit
+document.getElementById('vigenereResult').innerText = result.match(/.{1,5}/g).join(' ');
+}
+// 3. KASISKI-TEST
+function runKasiskiTest() {
+const text = cleanText(inputTextArea.value);
+const minLen = parseInt(document.getElementById('kasiskiMinLen').value) || 3;
+if (text.length < minLen) {
+document.getElementById('kasiskiResult').innerText = "Der Text ist zu kurz für die gewählte Musterlänge.";
+return;
+}
+let repeats = {};
+// Suche nach Mustern
+for (let i = 0; i <= text.length - minLen; i++) {
+let pattern = text.substr(i, minLen);
+// Schauen, ob das Muster später im Text nochmal vorkommt
+let pos = text.indexOf(pattern, i + 1);
+while (pos !== -1) {
+if (!repeats[pattern]) repeats[pattern] = [];
+if (!repeats[pattern].includes(i + 1)) repeats[pattern].push(i + 1);
+if (!repeats[pattern].includes(pos + 1)) repeats[pattern].push(pos + 1);
+pos = text.indexOf(pattern, pos + 1);
+}
+}
+// Auswertung aufbereiten
+let output = "Gefundene Wiederholungen:\n=========================\n";
+let found = false;
+for (let pattern in repeats) {
+found = true;
+let positions = repeats[pattern].sort((a,b) => a-b);
+output += `Muster "${pattern}": Gefunden an Positionen [${positions.join(', ')}]\n`;
+// Abstände und Teiler berechnen
+let distances = [];
+for(let k = 1; k < positions.length; k++) {
+let dist = positions[k] - positions[k-1];
+distances.push(dist);
+}
+output += `-> Abstände: ${distances.join(', ')}\n`;
+// Faktoren der Abstände ermitteln
+distances.forEach(d => {
+let factors = [];
+for(let f = 2; f <= 15; f++) {
+if(d % f === 0) factors.push(f);
+}
+if (factors.length > 0) output += `-> Mögliche Schlüssellängen (Teiler von ${d}): ${factors.join(', ')}\n`;
+});
+output += "\n";
+}
+if (!found) output = "Keine wiederkehrenden Muster mit dieser Mindestlänge gefunden.";
+document.getElementById('kasiskiResult').innerText = output;
+}
+// 4. BRUTE-FORCE ANGRIFF (Chi-Quadrat-Test)
+function runBruteForce() {
+const text = cleanText(inputTextArea.value);
+const keyLen = parseInt(document.getElementById('bfLen').value) || 3;
+if (!text) {
+alert("Bitte gib zuerst einen Geheimtext ein.");
+return;
+}
+if (keyLen > 3) {
+if(!confirm("Bei Schlüssellängen > 3 kann die Berechnung im Browser einige Sekunden dauern (Länge 4 = 456.976 Kombinationen). Fortfahren?")) return;
+}
+document.getElementById('bfResult').innerText = "Berechnung läuft... Bitte warten...";
+// Nutzt Timeout, damit der UI-Thread für die Anzeige nicht einfriert
+setTimeout(() => {
+let results = [];
+// Rekursiver Generator für alle Schlüssel-Kombinationen
+function generateKeys(currentKey) {
+if (currentKey.length === keyLen) {
+evaluateKey(currentKey);
+return;
+}
+for (let i = 0; i < 26; i++) {
+generateKeys(currentKey + String.fromCharCode(65 + i));
+}
+}
+// Bewerte einen generierten Schlüssel anhand der deutschen Buchstabenverteilung
+function evaluateKey(key) {
+// Temporär entschlüsseln
+let decrypted = "";
+let counts = Array(26).fill(0);
+for (let i = 0; i < text.length; i++) {
+let tVal = text.charCodeAt(i) - 65;
+let kVal = key.charCodeAt(i % keyLen) - 65;
+let dVal = (tVal - kVal + 26) % 26;
+counts[dVal]++;
+if(decrypted.length < 50) { // Nur Vorschau speichern
+decrypted += String.fromCharCode(dVal + 65);
+}
+}
+// Chi-Quadrat Metrik berechnen (je niedriger, desto näher an Deutsch)
+let chiSquare = 0;
+for (let i = 0; i < 26; i++) {
+let observed = counts[i];
+let expected = (GERMAN_26[String.fromCharCode(65 + i)] / 100) * text.length;
+if (expected > 0) {
+chiSquare += Math.pow(observed - expected, 2) / expected;
+}
+}
+results.push({ key: key, score: chiSquare, preview: decrypted });
+}
+generateKeys("");
+// Sortieren nach dem besten Score (kleinstes Chi-Quadrat zuerst)
+results.sort((a, b) => a.score - b.score);
+// Top 15 Ergebnisse anzeigen
+let output = `Top Treffer für Schlüssellänge ${keyLen}:\n`;
+output += `SCHLÜSSEL | SCORE | KLARTEXT-VORSCHAU\n`;
+output += `--------------------------------------------------------\n`;
+results.slice(0, 15).forEach(res => {
+output += `${res.key.padEnd(9)} | ${res.score.toFixed(2).padEnd(6)} | ${res.preview}...\n`;
+});
+document.getElementById('bfResult').innerText = output;
+}, 50);
+}
+
+
+
+</script>
+</body>
+</html>
