@@ -233,4 +233,10 @@
         }
 
         let output = `Vermuteter Schlüssel: **${bestKey}**\n\nEntschlüsselter Text:\n${decodedText}`;
-showOutput("Brute-Force Kryptoanalyse (Automatisch geknackt):", output);}// Anzeige-Funktionfunction showOutput(title, content) {document.getElementById('outputContainer').style.display = 'block';document.getElementById('resultHeader').innerText = title;document.getElementById('outputText').innerText = content;}
+showOutput("Brute-Force Kryptoanalyse (Automatisch geknackt):", output);}
+    // Anzeige-Funktionfunction
+    showOutput(title, content) {
+        document.getElementById('outputContainer').style.display = 'block';
+        document.getElementById('resultHeader').innerText = title;
+        document.getElementById('outputText').innerText = content;
+    }
