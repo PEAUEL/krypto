@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vigenère Krypto-Tool</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h1, h2 { color: #2c3e50; }
+        label { font-weight: bold; display: block; margin-top: 15px; }
+        textarea, input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        textarea { height: 100px; resize: vertical; }
+        .btn-group { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .btn-enc { background-color: #27ae60; color: white; }
+        .btn-dec { background-color: #2980b9; color: white; }
+        .btn-kasiski { background-color: #8e44ad; color: white; }
+        .btn-brute { background-color: #d35400; color: white; }
+        button:hover { opacity: 0.9; }
+        .output-box { margin-top: 20px; padding: 15px; background: #eef2f3; border-left: 5px solid #2c3e50; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
+        .result-title { font-weight: bold; margin-bottom: 5px; color: #2c3e50; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Vigenère Krypto-Tool</h1>
+    <p>Codieren, Decodieren und Kryptoanalyse (Kasiski-Test & Brute-Force) in einem Werkzeug.</p>
+
+    <label for="inputText">Eingabetext (für Kasiski/Brute-Force wird ein längerer Geheimtext benötigt):</label>
+    <textarea id="inputText" placeholder="Hier Text eingeben..."></textarea>
+
+    <label for="key">Schlüssel (nur Buchstaben für Codierung/Decodierung):</label>
+    <input type="text" id="key" placeholder="z.B. GEHEIM" value="GEHEIM">
+
+    <div class="btn-group">
+        <button class="btn-enc" onclick="processVigenere(true)">Verschlüsseln</button>
+        <button class="btn-dec" onclick="processVigenere(false)">Entschlüsseln</button>
+        <button class="btn-kasiski" onclick="runKasiski()">Kasiski-Test</button>
+        <button class="btn-brute" onclick="runBruteForce()">Brute-Force (Knacken)</button>
+    </div>
+
+    <div id="outputContainer" style="display:none;">
+        <h2 id="resultHeader">Ergebnis</h2>
+        <div id="outputText" class="output-box"></div>
+    </div>
+</div>
+
+<script>
+    // Hilfsfunktion: Bereinigt Text (nur A-Z)
+    function cleanText(text) {
+        return text.toUpperCase().replace(/[^A-Z]/g, '');
+    }
+
+    // GgT (Größter gemeinsamer Teiler)
+    function gcd(a, b) {
+        return b === 0 ? a : gcd(b, a % b);
+    }
+
+    // Standard-Buchstabenhäufigkeit im Deutschen (A-Z)
+    const GERMAN_FREQ = [
+        0.0651, 0.0189, 0.0306, 0.0508, 0.1740, 0.0166, 0.0301, 0.0476, 0.0755,
+        0.0027, 0.0121, 0.0344, 0.0253, 0.0978, 0.0251, 0.0079, 0.0002, 0.0700,
+        0.0727, 0.0615, 0.0435, 0.0067, 0.0189, 0.0003, 0.0004, 0.0113
+    ];
+
+    // Vigenère Ver- und Entschlüsselung
+    function processVigenere(isEncrypt) {
+        const text = document.getElementById('inputText').value;
+        const key = cleanText(document.getElementById('key').value);
+        
+        if (!key) {
+            alert("Bitte einen gültigen Schlüssel eingeben!");
+            return;
+        }
+
+        let result = "";
+        let keyIndex = 0;
+
+        for (let i = 0; i < text.length; i++) {
+            let char = text[i];
+            if (char.match(/[a-zA-Z]/)) {
+                const isUpperCase = char === char.toUpperCase();
+                const base = isUpperCase ? 65 : 97;
+                const textVal = char.toUpperCase().charCodeAt(0) - 65;
+                const keyVal = key[keyIndex % key.length].charCodeAt(0) - 65;
+                
+                let shift = isEncrypt ? keyVal : (26 - keyVal);
+                let newChar = String.fromCharCode(((textVal + shift) % 26) + base);
+                
+                result += newChar;
+                keyIndex++;
+            } else {
+                result += char; // Sonderzeichen/Leerzeichen beibehalten
+            }
+        }
+
+        showOutput("Ergebnis (Vigenère " + (isEncrypt ? "verschlüsselt" : "entschlüsselt") + "):", result);
+    }
+
+    // Kasiski-Prüfung zur Ermittlung der Schlüssellänge
+    function runKasiski() {
+        const text = cleanText(document.getElementById('inputText').value);
+        if (text.length < 10) {
+            alert("Der Text ist zu kurz für eine Kasiski-Analyse. Verwende mindestens 20-30 Zeichen.");
+            return;
+        }
+
+        const seqLength = 3; // Suche nach Trigrammen
+        const distances = {};
+        
+        // Suche sich wiederholende Muster
+        for (let i = 0; i <= text.length - seqLength; i++) {
+            let seq = text.substr(i, seqLength);
+            for (let j = i + seqLength; j <= text.length - seqLength; j++) {
+                if (text.substr(j, seqLength) === seq) {
+                    let dist = j - i;
+                    if (!distances[dist]) distances[dist] = 0;
+                    distances[dist]++;
+                }
+            }
+        }
+
+        // Finde gemeinsame Teiler der Abstände
+        let factorCounts = {};
+        Object.keys(distances).forEach(dist => {
+            let d = parseInt(dist);
+            for (let f = 2; f <= 20; f++) { // Prüfe Schlüssellängen von 2 bis 20
+                if (d % f === 0) {
+                    factorCounts[f] = (factorCounts[f] || 0) + distances[dist];
+                }
+            }
+        });
+
+        // Sortiere Teiler nach Wahrscheinlichkeit
+        let sortedFactors = Object.keys(factorCounts).sort((a, b) => factorCounts[b] - factorCounts[a]);
+
+        let log = "Gefundene Muster-Wiederholungen (Trigramme):\n";
+        if (sortedFactors.length === 0) {
+            log += "Keine wiederkehrenden Muster gefunden. Text ist zu kurz oder kein Vigenère.";
+        } else {
+            log += "Wahrscheinlichste Schlüssellängen (Top 3):\n";
+            for (let i = 0; i < Math.min(3, sortedFactors.length); i++) {
+                log += `- Länge ${sortedFactors[i]} (Score: ${factorCounts[sortedFactors[i]]})\n`;
+            }
+            log += "\nHinweis: Nutze diese Länge für den Brute-Force-Angriff!";
+        }
+
+        showOutput("Kasiski-Testergebnis:", log);
+    }
+
+    // Brute-Force Angriff mittels Häufigkeitsanalyse (Chi-Quadrat-Test)
+    function runBruteForce() {
+        const text = cleanText(document.getElementById('inputText').value);
+        if (text.length < 15) {
+            alert("Für eine erfolgreiche Häufigkeitsanalyse wird ein längerer Text benötigt.");
+            return;
+        }
+
+        let bestKey = "";
+        let bestScore = Infinity;
+        
+        // Da die Schlüssellänge oft unbekannt ist, testen wir Schlüssellängen von 1 bis 12 durch
+        // (Bei bekannter Länge aus dem Kasiski-Test kann man das manuell ablesen)
+        for (let len = 1; len <= 12; len++) {
+            let currentKey = "";
+            let totalLenScore = 0;
+
+            // Für jede Position im Schlüssel eine Caesar-Häufigkeitsanalyse durchführen
+            for (let k = 0; k < len; k++) {
+                let subtext = "";
+                for (let i = k; i < text.length; i += len) {
+                    subtext += text[i];
+                }
+
+                if (subtext.length === 0) continue;
+
+                let bestShift = 0;
+                let minChi2 = Infinity;
+
+                // Teste alle 26 möglichen Rotationen (Caesar-Verschiebungen) für diesen Teil-Text
+                for (let shift = 0; shift < 26; shift++) {
+                    let counts = new Array(26).fill(0);
+                    for (let i = 0; i < subtext.length; i++) {
+                        let code = (subtext.charCodeAt(i) - 65 - shift + 26) % 26;
+                        counts[code]++;
+                    }
+
+                    // Berechne Chi-Quadrat-Abweichung zur deutschen Sprache
+                    let chi2 = 0;
+                    for (let c = 0; c < 26; c++) {
+                        let expected = subtext.length * GERMAN_FREQ[c];
+                        chi2 += Math.pow(counts[c] - expected, 2) / (expected || 1);
+                    }
+
+                    if (chi2 < minChi2) {
+                        minChi2 = chi2;
+                        bestShift = shift;
+                    }
+                }
+                currentKey += String.fromCharCode(65 + bestShift);
+                totalLenScore += minChi2;
+            }
+
+            // Gesamtwert für diese Schlüssellänge normalisieren
+            let normalizedScore = totalLenScore / len;
+            if (normalizedScore < bestScore) {
+                bestScore = normalizedScore;
+                bestKey = currentKey;
+            }
+        }
+
+        // Mit dem ermittelten besten Schlüssel entschlüsseln
+        let decodedText = "";
+        let keyIndex = 0;
+        const originalText = document.getElementById('inputText').value;
+
+        for (let i = 0; i < originalText.length; i++) {
+            let char = originalText[i];
+            if (char.match(/[a-zA-Z]/)) {
+                const isUpperCase = char === char.toUpperCase();
+                const base = isUpperCase ? 65 : 97;
+                const textVal = char.toUpperCase().charCodeAt(0) - 65;
+                const keyVal = bestKey[keyIndex % bestKey.length].charCodeAt(0) - 65;
+                
+                let newChar = String.fromCharCode(((textVal - keyVal + 26) % 26) + base);
+                decodedText += newChar;
+                keyIndex++;
+            } else {
+                decodedText += char;
+            }
+        }
+
+        let output = `Vermuteter Schlüssel: **${bestKey}**\n\nEntschlüsselter Text:\n${decodedText}`;
+showOutput("Brute-Force Kryptoanalyse (Automatisch geknackt):", output);}// Anzeige-Funktionfunction showOutput(title, content) {document.getElementById('outputContainer').style.display = 'block';document.getElementById('resultHeader').innerText = title;document.getElementById('outputText').innerText = content;}
